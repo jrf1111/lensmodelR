@@ -85,7 +85,7 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 	
 	
 	
-	if(step) step=c("e", "j") else step="n"
+	if(step==T) step=c("e", "j") else step="n"
 	estep=F
 	jstep=F
 	if("e" %in% step) estep=T else estep=F
@@ -725,7 +725,6 @@ summary.lens = function(lens, stat = median, by = NULL, digits = 3, conf = 0.95,
 	res
 	
 }
-
 
 
 
