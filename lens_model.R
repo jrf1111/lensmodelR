@@ -314,6 +314,13 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 		
 		colnames(env_data)[1] = e_ID
 		
+		
+		#make env_fit$call reasonable
+		env_fit$call[[3]] = bquote(data[!duplicated(data[, .(e_ID)]), ])
+		
+
+		
+		
 	}
 	
 	
@@ -362,7 +369,21 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 		
 		ind_mods = ind_res[[2]]
 		names(ind_mods) = ind_data[, j_ID]
+		
+		#make ind_mods[[x]]$call reasonable
+		for(i in 1:length(ind_mods)){
+			name = names(ind_mods[i])
+			ind_mods[[i]]$call[[3]] = bquote( data[.(j_ID) == .(name), ] )
+		}
+		
+
+		
+	
+		
 		rm(ind_res)
+		
+		
+		
 		
 	}
 	
@@ -404,11 +425,11 @@ eval_judge = function(i, criterion, judgment, j_cues, j_ID, j_misc,
 											std, method, method_args, pred_type, step, step_args, 
 											data, criterion_hat, save, ...){
 	
-	r_ID_scalar = unique( data[, j_ID] )[i]
+	j_ID_scalar = unique( data[, j_ID] )[i]
 	
-	ind_data = data.frame(j_ID = r_ID_scalar, stringsAsFactors=F)
+	ind_data = data.frame(j_ID = j_ID_scalar, stringsAsFactors=F)
 	
-	temp = data[which(data[, j_ID] == r_ID_scalar),  ]
+	temp = data[which(data[, j_ID] == j_ID_scalar),  ]
 	
 	
 	#save j_misc vars
@@ -590,7 +611,7 @@ eval_judge = function(i, criterion, judgment, j_cues, j_ID, j_misc,
 		ind_data = list(ind_data, fit)
 	}
 	
-	names(ind_data)[2] = r_ID_scalar
+	names(ind_data)[2] = j_ID_scalar
 	
 	ind_data
 	
@@ -725,6 +746,8 @@ summary.lens = function(lens, stat = median, by = NULL, digits = 3, conf = 0.95,
 	res
 	
 }
+
+
 
 
 
