@@ -1,7 +1,5 @@
 # to do list -------------------------------------------------------------------
-# convert to use broom::tidy to get all coefs instead of using a for loop.  will need to change
-#       .combine arg in the main loop to plyr::rbind.fill
-# add formula interface?
+# add formula interface
 # add plotting function
 
 
@@ -21,10 +19,15 @@
 #' @param method Function name specifying how the models should be fit. Can use any method that 
 #'                has broom::tidy(), broom::glance(), and predict() methods, 
 #'                and accepts formulas. Default is lm.
-#' @param step Should the function step() be used to reduce the number of cues used in the environment's and judges' models?
-#'             default is FALSE.  If TRUE, the default behavior uses step(..., direction = "both)
+#' @param step Character vector indicating if the function step() be used to reduce the number of cues used in the environment's and/or judges' models?
+#'             Default is step="n" for No. Use step="j" to reduce judge's models.  Use step="e" to reduce environment's model.  
+#'             Use step=c("e", "j") to use in both.  
+#'             Using step=FALSE will be treated as step="n".  Using step=TRUE will be treated as step=c("e", "j").
 #' @param parallel Should the judges' models be run in parallel? Default is FALSE.
 #' @param cores Number of cores to use if running in parallel.  Default is 3.
+#' @param save Character vector indicating if the model objects for the environment (e) and/or judges (j) should be saved.
+#'             Default is c("e").  Use c("e", "j") if the individual model objects should be saved for the judges and the environment.
+#'             
 #' @param data The data.frame, data.table, or matrix containing the data.  
 #' @param ... Arguments passed to other methods. For example, if method = glm, you might pass family = binomial.  
 #'            If step = T, you might pass a value for k or direction
@@ -58,30 +61,35 @@ library(broom)
 lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j_ID, j_misc=NULL,
 										 e_ID, e_misc=NULL, std = c("both", "x", "y", "none"),
 										 method = glm, method_args = list(),
-										 step = F, step_args = list(k = 2, direction = "both", scope = .~.),
+										 step = "n", step_args = list(k = 2, direction = "both", scope = .~.),
 										 pred_type = "response",
-										 parallel = F, cores = 3, data){
+										 parallel = F, cores = 3, save = c("e"), data){
 	
 	if(is.null(j_cues) & !is.null(cues)){
-		warning("'j_cues' is null. setting 'j_cues = cues'", immediate. = T)
+		warning("'j_cues' is null. Setting 'j_cues = cues'", immediate. = T)
 		j_cues = cues
 	}
 	
 	if(is.null(j_cues) & is.null(cues)){
-		warning("'j_cues' and 'cues' are null. judge's models are intercept only", immediate. = T)
+		warning("'j_cues' and 'cues' are null. Judge's models are intercept only", immediate. = T)
 	}
 	
 	if(is.null(e_cues) & !is.null(cues)){
-		warning("'e_cues' is null. setting 'e_cues = cues'", immediate. = T)
+		warning("'e_cues' is null. Setting 'e_cues = cues'", immediate. = T)
 		e_cues = cues
 	}
 	
 	if(is.null(e_cues) & is.null(cues)){
-		warning("'e_cues' and 'cues' are null. environment's model is intercept only", immediate. = T)
+		warning("'e_cues' and 'cues' are null. Environment's model is intercept only", immediate. = T)
 	}
 	
 	
 	
+	if(step) step=c("e", "j") else step="n"
+	estep=F
+	jstep=F
+	if("e" %in% step) estep=T else estep=F
+	if("j" %in% step) jstep=T else jstep=F
 	
 	
 	std = match.arg(std, c("both", "x", "y", "none"))
@@ -108,7 +116,7 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
 			
 			
-			if(step){
+			if(estep){
 				env_fit = do.call("step", c(list(object = env_fit, trace = F), step_args))
 			}
 			
@@ -119,8 +127,16 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 			env_coef = data.frame(intercept = unname(tidy[tidy$term == "(Intercept)", "estimate" ]) )
 			
 			for( a in 1:length(e_cues)){
-				env_coef[1, paste0("b_", e_cues[a]) ] = tidy[tidy$term == e_cues[a], "estimate" ]
-				env_coef[1, paste0("se_", e_cues[a]) ] = tidy[tidy$term == e_cues[a], "std.error" ]
+				
+				term =  e_cues[a]
+				
+				if(term %in% tidy$term){
+					env_coef[1, paste0("b_", e_cues[a]) ] = tidy[tidy$term == term, "estimate" ]
+					env_coef[1, paste0("se_", e_cues[a]) ] = tidy[tidy$term == term, "std.error" ]
+				} else{
+					env_coef[1, paste0("b_", e_cues[a]) ] = NA
+					env_coef[1, paste0("se_", e_cues[a]) ] = NA
+				}
 			}
 			
 			rownames(env_coef) = NULL
@@ -142,7 +158,7 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 			
 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
 			
-			if(step){
+			if(estep){
 				env_fit = do.call("step", c(list(object = env_fit, trace = F), step_args))
 			}
 			
@@ -187,7 +203,7 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 			
 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
 			
-			if(step){
+			if(estep){
 				env_fit = do.call("step", c(list(object = env_fit, trace = F), step_args))
 			}
 			
@@ -197,8 +213,15 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 			
 			for( a in 1:length(e_cues)){
 				
-				env_coef[1, paste0("B_", e_cues[a]) ] = tidy[tidy$term == paste0( "scale(", e_cues[a], ")" ), "estimate" ]
-				env_coef[1, paste0("se_", e_cues[a]) ] = tidy[tidy$term == paste0( "scale(", e_cues[a], ")" ), "std.error" ]
+				term = paste0( "scale(", e_cues[a], ")" )
+				
+				if(term %in% tidy$term){
+					env_coef[1, paste0("B_", e_cues[a]) ] = tidy[tidy$term == term, "estimate" ]
+					env_coef[1, paste0("se_", e_cues[a]) ] = tidy[tidy$term == term, "std.error" ]
+				} else{
+					env_coef[1, paste0("B_", e_cues[a]) ] = NA
+					env_coef[1, paste0("se_", e_cues[a]) ] = NA
+				}
 				
 			}
 			
@@ -222,7 +245,7 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 			
 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
 			
-			if(step){
+			if(estep){
 				env_fit = do.call("step", c(list(object = env_fit, trace = F), step_args))
 			}
 			
@@ -232,9 +255,15 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 			
 			for( a in 1:length(e_cues)){
 				
-				env_coef[1, paste0("b_", e_cues[a]) ] = tidy[tidy$term == e_cues[a], "estimate" ]
-				env_coef[1, paste0("se_", e_cues[a]) ] = tidy[tidy$term == e_cues[a], "std.error" ]
+				term =  e_cues[a]
 				
+				if(term %in% tidy$term){
+					env_coef[1, paste0("b_", e_cues[a]) ] = tidy[tidy$term == term, "estimate" ]
+					env_coef[1, paste0("se_", e_cues[a]) ] = tidy[tidy$term == term, "std.error" ]
+				} else{
+					env_coef[1, paste0("b_", e_cues[a]) ] = NA
+					env_coef[1, paste0("se_", e_cues[a]) ] = NA
+				}
 			}
 			
 			rownames(env_coef) = NULL
@@ -295,36 +324,45 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 	{
 		
 		if(parallel){
-			
 			cores = as.integer(cores)
-			
 			if(is.null(cores) | is.na(cores)){
 				doParallel::registerDoParallel()
 			} else{
 				doParallel::registerDoParallel(cores = cores)
 			}
+		} 
+		
+		
+		my_combine = function(...){
 			
-			ind_data = foreach::foreach(i = 1:length(unique(data[, j_ID])), .combine=rbind) %dopar% {
-				eval_judge(i = i, criterion = criterion, judgment = judgment, j_cues = j_cues, criterion_hat = criterion_hat,
-									 j_ID = j_ID, j_misc = j_misc, std = std, method = method, method_args = method_args,
-									 pred_type = pred_type, step = step, step_args = step_args, data = data)
-			}
+			dots = list(...)
 			
-			doParallel::stopImplicitCluster()
+			info = lapply(dots, function(x) x[[1]])
+			info = plyr::rbind.fill(info)
 			
-		} else{
+			mods = lapply(dots, function(x) x[[2]])
 			
-			ind_data = foreach(i = 1:length(unique(data[, j_ID])), .combine=rbind) %do% {
-				eval_judge(i = i, criterion = criterion, judgment = judgment, j_cues = j_cues, criterion_hat = criterion_hat,
-									 j_ID = j_ID, j_misc = j_misc, std = std, method = method, method_args = method_args,
-									 pred_type = pred_type, step = step, step_args = step_args, data = data)
-			}
-			
+			list(info, mods)
 		}
 		
+		n_judges = length(unique(data[, j_ID]))
 		
+		ind_res = foreach::foreach(i = 1:n_judges, 
+															 .combine=my_combine, .multicombine = T, 
+															 .maxcombine = n_judges) %dopar% {
+			eval_judge(i = i, criterion = criterion, judgment = judgment, j_cues = j_cues, criterion_hat = criterion_hat,
+								 j_ID = j_ID, j_misc = j_misc, std = std, method = method, method_args = method_args,
+								 pred_type = pred_type, step = jstep, step_args = step_args, data = data, save = save)
+		}
+		
+		doParallel::stopImplicitCluster()
+		
+		ind_data = ind_res[[1]]
 		colnames(ind_data)[1] = j_ID
 		
+		ind_mods = ind_res[[2]]
+		names(ind_mods) = ind_data[, j_ID]
+		rm(ind_res)
 		
 	}
 	
@@ -333,9 +371,16 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 	
 	result = list(ind_data = ind_data, env_data = env_data,
 								env_model = as.data.frame(cbind(env_coef, env_model_fit)),
-								env_fit = env_fit,
 								cues = cues, e_cues = e_cues, j_cues = j_cues
 	)
+	
+	if("e" %in% save){
+		result[["env_fit"]] = env_fit
+	}
+	
+	if("j" %in% save){
+		result[["ind_mods"]] = ind_mods
+	}
 	
 	class(result) = "lens"
 	
@@ -356,7 +401,8 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 #'    return ind_data as a one row data.frame
 
 eval_judge = function(i, criterion, judgment, j_cues, j_ID, j_misc,
-											std, method, method_args, pred_type, step, step_args, data, criterion_hat, ...){
+											std, method, method_args, pred_type, step, step_args, 
+											data, criterion_hat, save, ...){
 	
 	r_ID_scalar = unique( data[, j_ID] )[i]
 	
@@ -387,12 +433,21 @@ eval_judge = function(i, criterion, judgment, j_cues, j_ID, j_misc,
 		
 		ind_data$intercept = as.numeric(unname(tidy[tidy$term == "(Intercept)", "estimate" ]))
 		
+		
+		
 		for( a in 1:length(j_cues)){
 			
-			ind_data[1, paste0("b_", j_cues[a]) ] = tidy[tidy$term == j_cues[a], "estimate" ]
-			ind_data[1, paste0("se_", j_cues[a]) ] = tidy[tidy$term == j_cues[a], "std.error" ]
+			term =  j_cues[a]
 			
+			if(term %in% tidy$term){
+				ind_data[1, paste0("b_", j_cues[a]) ] = tidy[tidy$term == term, "estimate" ]
+				ind_data[1, paste0("se_", j_cues[a]) ] = tidy[tidy$term == term, "std.error" ]
+			} else{
+				ind_data[1, paste0("b_", j_cues[a]) ] = NA
+				ind_data[1, paste0("se_", j_cues[a]) ] = NA
+			}
 		}
+		
 		
 	}
 	
@@ -449,8 +504,15 @@ eval_judge = function(i, criterion, judgment, j_cues, j_ID, j_misc,
 		
 		for( a in 1:length(j_cues)){
 			
-			ind_data[1, paste0("B_", j_cues[a])   ] = tidy[tidy$term == paste0( "scale(", j_cues[a], ")" ), "estimate" ]
-			ind_data[1, paste0("se_", j_cues[a])   ] = tidy[tidy$term == paste0( "scale(", j_cues[a], ")" ), "std.error" ]
+			term = paste0( "scale(", j_cues[a], ")" )
+			
+			if(term %in% tidy$term){
+				ind_data[1, paste0("B_", j_cues[a])   ] = tidy[tidy$term == term, "estimate" ]
+				ind_data[1, paste0("se_", j_cues[a])   ] = tidy[tidy$term == term, "std.error" ]
+			} else{
+				ind_data[1, paste0("B_", j_cues[a])   ] = NA
+				ind_data[1, paste0("se_", j_cues[a])   ] = NA
+			}
 			
 		}
 	}
@@ -475,9 +537,15 @@ eval_judge = function(i, criterion, judgment, j_cues, j_ID, j_misc,
 		
 		for( a in 1:length(j_cues)){
 			
-			ind_data[1, paste0("b_", j_cues[a]) ] = tidy[tidy$term == j_cues[a], "estimate" ]
-			ind_data[1, paste0("se_", j_cues[a]) ] = tidy[tidy$term == j_cues[a], "std.error" ]
+			term =  j_cues[a]
 			
+			if(term %in% tidy$term){
+				ind_data[1, paste0("b_", j_cues[a]) ] = tidy[tidy$term == term, "estimate" ]
+				ind_data[1, paste0("se_", j_cues[a]) ] = tidy[tidy$term == term, "std.error" ]
+			} else{
+				ind_data[1, paste0("b_", j_cues[a]) ] = NA
+				ind_data[1, paste0("se_", j_cues[a]) ] = NA
+			}
 		}
 	}
 	
@@ -517,6 +585,12 @@ eval_judge = function(i, criterion, judgment, j_cues, j_ID, j_misc,
 	if("deviance" %in% colnames(glance(fit))){
 		ind_data$deviance = as.numeric(glance(fit)["deviance"])
 	}
+	
+	if("j" %in% save){
+		ind_data = list(ind_data, fit)
+	}
+	
+	names(ind_data)[2] = r_ID_scalar
 	
 	ind_data
 	
@@ -651,6 +725,9 @@ summary.lens = function(lens, stat = median, by = NULL, digits = 3, conf = 0.95,
 	res
 	
 }
+
+
+
 
 
 
