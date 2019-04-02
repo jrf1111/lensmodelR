@@ -8,11 +8,13 @@
 
 #' @param criterion the variable that judgments are being compared against
 #' @param judgment the variable for people's decisions
-#' @param cues variables in the environment.  Categorical vars must be dummy coded
-#' @param r_ID respondent ID
-#' @param s_ID stimulus ID
-#' @param r_misc other respondent-level variables to save, such as condition, age, sex, etc
-#' @param s_misc other stimulus-level variables to save, such as brand, etc
+#' @param cues variables/cues in the environment for the environment and judge's models.  Categorical vars must be dummy coded
+#' @param j_cues variables/cues in the environment for the judge's model.  Categorical vars must be dummy coded
+#' @param e_cues variables/cues in the environment for the environment's model.  Categorical vars must be dummy coded
+#' @param j_ID judge ID
+#' @param e_ID environment/stimulus ID
+#' @param j_misc other judge/respondent-level variables to save, such as condition, age, sex, etc
+#' @param e_misc other environment/stimulus-level variables to save, such as brand, etc
 #' @param std How should variables be standardized? Use "both" or TRUE to standardize X and Y variables.  
 #'            Use "x" for X standardization (scale predictors only). Use "y" for Y standardization (scale outcomes only).
 #'            Use "none" or FALSE if no standardization is wanted.
@@ -28,7 +30,7 @@
 #'            If step = T, you might pass a value for k or direction
 #'
 #' @return returns a list of class 'lens' containing several elements:
-#' 1) ind_data: a data.frame for the individual judgements that contains the r_ID variable, r_misc variables, 
+#' 1) ind_data: a data.frame for the individual judgements that contains the j_ID variable, j_misc variables, 
 #'      regression coefs, model fit information (R, R squared, adjusted R squared, residual standard error, 
 #'      omnibus test statistic (e.g., F-ratio), AIC, BIC, and deviance), and the lens model statistics 
 #'      G (correlation between fitted values from model predicting criterion and fitted values from model predicting judgment), 
@@ -36,14 +38,16 @@
 #'      from model predicting criterion and residuals from model predicting judgment)
 #'      
 #' 2) env_data: a data.frame for the environment that contains the criterion,
-#'      predicted value of the criterion (suffix "_hat"), the prediction residual, and the s_misc variables
+#'      predicted value of the criterion (suffix "_hat"), the prediction residual, and the e_misc variables
 #'      
 #' 3) env_model: a data.frame containing regression coefs and model fit information (R squared, 
 #'      adjusted R squared, residual standard error, F ratio, AIC, BIC, and deviance) for the environment model
 #'      
 #' 4) env_fit: the environment model object
 #'      
-#' 5) cues: a character vector containing the cues used in the analysis
+#' 5) j_cues: a character vector containing the cues used in the models for the judges
+#' 
+#' 6) e_cues: a character vector containing the cues used in the model for the environment
 #' 
 
 
@@ -51,12 +55,32 @@
 library(foreach)
 library(doParallel)
 library(broom)
-lensModel = function(criterion, judgment, cues, r_ID, r_misc,
-										 s_ID, s_misc, std = c("both", "x", "y", "none"),
+lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j_ID, j_misc=NULL,
+										 e_ID, e_misc=NULL, std = c("both", "x", "y", "none"),
 										 method = glm, method_args = list(),
 										 step = F, step_args = list(k = 2, direction = "both", scope = .~.),
 										 pred_type = "response",
 										 parallel = F, cores = 3, data){
+	
+	if(is.null(j_cues) & !is.null(cues)){
+		warning("'j_cues' is null. setting 'j_cues = cues'", immediate. = T)
+		j_cues = cues
+	}
+	
+	if(is.null(j_cues) & is.null(cues)){
+		warning("'j_cues' and 'cues' are null. judge's models are intercept only", immediate. = T)
+	}
+	
+	if(is.null(e_cues) & !is.null(cues)){
+		warning("'e_cues' is null. setting 'e_cues = cues'", immediate. = T)
+		e_cues = cues
+	}
+	
+	if(is.null(e_cues) & is.null(cues)){
+		warning("'e_cues' and 'cues' are null. environment's model is intercept only", immediate. = T)
+	}
+	
+	
 	
 	
 	
@@ -66,19 +90,19 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 	
 	data = as.data.frame(data)
 	
-	
-	#environment analyses
+
+# environment analyses ----------------------------------------------------
 	{
-		env_data = data.frame(s_ID = unique(data[, s_ID]))
+		env_data = data.frame(e_ID = unique(data[, e_ID]))
 		
-		temp = data[!duplicated(data[, s_ID]), ]
+		temp = data[!duplicated(data[, e_ID]), ]
 		
 		
 		# if UNstandardized coefs are requested
 		if(std == "none"){
 			
 			#make formula
-			form = as.formula(paste(criterion, "~", paste(cues, collapse = "+")))
+			form = as.formula(paste(criterion, "~", paste(e_cues, collapse = "+")))
 			
 			#fit environment model
 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
@@ -94,9 +118,9 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 			#put coefficients in a data.frame
 			env_coef = data.frame(intercept = unname(tidy[tidy$term == "(Intercept)", "estimate" ]) )
 			
-			for( a in 1:length(cues)){
-				env_coef[1, paste0("b_", cues[a]) ] = tidy[tidy$term == cues[a], "estimate" ]
-				env_coef[1, paste0("se_", cues[a]) ] = tidy[tidy$term == cues[a], "std.error" ]
+			for( a in 1:length(e_cues)){
+				env_coef[1, paste0("b_", e_cues[a]) ] = tidy[tidy$term == e_cues[a], "estimate" ]
+				env_coef[1, paste0("se_", e_cues[a]) ] = tidy[tidy$term == e_cues[a], "std.error" ]
 			}
 			
 			rownames(env_coef) = NULL
@@ -114,7 +138,7 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 			
 			#make formula
 			form = as.formula(paste("scale(", criterion, ") ~",
-															"scale(", paste(cues, collapse = ")+scale("), ")"  ))
+															"scale(", paste(e_cues, collapse = ")+scale("), ")"  ))
 			
 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
 			
@@ -126,16 +150,16 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 			
 			env_coef = data.frame(intercept = unname(tidy[tidy$term == "(Intercept)", "estimate" ]) )
 			
-			for( a in 1:length(cues)){
+			for( a in 1:length(e_cues)){
 				
-				term = paste0( "scale(", cues[a], ")" )
+				term = paste0( "scale(", e_cues[a], ")" )
 				
 				if(term %in% tidy$term){
-					env_coef[1, paste0("B_", cues[a]) ] = tidy[tidy$term == term, "estimate" ]
-					env_coef[1, paste0("se_", cues[a]) ] = tidy[tidy$term == term, "std.error" ]
+					env_coef[1, paste0("B_", e_cues[a]) ] = tidy[tidy$term == term, "estimate" ]
+					env_coef[1, paste0("se_", e_cues[a]) ] = tidy[tidy$term == term, "std.error" ]
 				} else{
-					env_coef[1, paste0("B_", cues[a]) ] = NA
-					env_coef[1, paste0("se_", cues[a]) ] = NA
+					env_coef[1, paste0("B_", e_cues[a]) ] = NA
+					env_coef[1, paste0("se_", e_cues[a]) ] = NA
 				}
 				
 			}
@@ -159,7 +183,7 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 			
 			#make formula
 			form = as.formula(paste(criterion, "~",
-															"scale(", paste(cues, collapse = ")+scale("), ")"  ))
+															"scale(", paste(e_cues, collapse = ")+scale("), ")"  ))
 			
 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
 			
@@ -171,10 +195,10 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 			
 			env_coef = data.frame(intercept = unname(tidy[tidy$term == "(Intercept)", "estimate" ]) )
 			
-			for( a in 1:length(cues)){
+			for( a in 1:length(e_cues)){
 				
-				env_coef[1, paste0("B_", cues[a]) ] = tidy[tidy$term == paste0( "scale(", cues[a], ")" ), "estimate" ]
-				env_coef[1, paste0("se_", cues[a]) ] = tidy[tidy$term == paste0( "scale(", cues[a], ")" ), "std.error" ]
+				env_coef[1, paste0("B_", e_cues[a]) ] = tidy[tidy$term == paste0( "scale(", e_cues[a], ")" ), "estimate" ]
+				env_coef[1, paste0("se_", e_cues[a]) ] = tidy[tidy$term == paste0( "scale(", e_cues[a], ")" ), "std.error" ]
 				
 			}
 			
@@ -194,7 +218,7 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 			
 			#make formula
 			form = as.formula(paste("scale(", criterion, ") ~",
-															paste(cues, collapse = "+")))
+															paste(e_cues, collapse = "+")))
 			
 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
 			
@@ -206,10 +230,10 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 			
 			env_coef = data.frame(intercept = unname(tidy[tidy$term == "(Intercept)", "estimate" ]) )
 			
-			for( a in 1:length(cues)){
+			for( a in 1:length(e_cues)){
 				
-				env_coef[1, paste0("b_", cues[a]) ] = tidy[tidy$term == cues[a], "estimate" ]
-				env_coef[1, paste0("se_", cues[a]) ] = tidy[tidy$term == cues[a], "std.error" ]
+				env_coef[1, paste0("b_", e_cues[a]) ] = tidy[tidy$term == e_cues[a], "estimate" ]
+				env_coef[1, paste0("se_", e_cues[a]) ] = tidy[tidy$term == e_cues[a], "std.error" ]
 				
 			}
 			
@@ -242,14 +266,14 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 		
 		
 		
-		#save s_misc vars
+		#save e_misc vars
 		for(i in 1:nrow(env_data)){
 			
-			temp = data[which(data[, s_ID] == env_data[i, "s_ID"] ),  ]
+			temp = data[which(data[, e_ID] == env_data[i, "e_ID"] ),  ]
 			
-			for(a in 1:length(s_misc)){
+			for(a in 1:length(e_misc)){
 				
-				env_data[i, s_misc[a]] = temp[1, s_misc[a]]
+				env_data[i, e_misc[a]] = temp[1, e_misc[a]]
 				env_data[i, criterion_hat] = temp[1, criterion_hat]
 				env_data[i, "residual"] = temp[1, "env_resid"]
 			}
@@ -259,15 +283,15 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 		
 		
 		
-		colnames(env_data)[1] = s_ID
+		colnames(env_data)[1] = e_ID
 		
 	}
 	
 	
 	
 	
-	
-	#respondent level analyses
+
+# judges analyses ---------------------------------------------------------
 	{
 		
 		if(parallel){
@@ -280,9 +304,9 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 				doParallel::registerDoParallel(cores = cores)
 			}
 			
-			ind_data = foreach::foreach(i = 1:length(unique(data[, r_ID])), .combine=rbind) %dopar% {
-				eval_judge(i = i, criterion = criterion, judgment = judgment, cues = cues, criterion_hat = criterion_hat,
-									 r_ID = r_ID, r_misc = r_misc, std = std, method = method, method_args = method_args,
+			ind_data = foreach::foreach(i = 1:length(unique(data[, j_ID])), .combine=rbind) %dopar% {
+				eval_judge(i = i, criterion = criterion, judgment = judgment, j_cues = j_cues, criterion_hat = criterion_hat,
+									 j_ID = j_ID, j_misc = j_misc, std = std, method = method, method_args = method_args,
 									 pred_type = pred_type, step = step, step_args = step_args, data = data)
 			}
 			
@@ -290,16 +314,16 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 			
 		} else{
 			
-			ind_data = foreach(i = 1:length(unique(data[, r_ID])), .combine=rbind) %do% {
-				eval_judge(i = i, criterion = criterion, judgment = judgment, cues = cues, criterion_hat = criterion_hat,
-									 r_ID = r_ID, r_misc = r_misc, std = std, method = method, method_args = method_args,
+			ind_data = foreach(i = 1:length(unique(data[, j_ID])), .combine=rbind) %do% {
+				eval_judge(i = i, criterion = criterion, judgment = judgment, j_cues = j_cues, criterion_hat = criterion_hat,
+									 j_ID = j_ID, j_misc = j_misc, std = std, method = method, method_args = method_args,
 									 pred_type = pred_type, step = step, step_args = step_args, data = data)
 			}
 			
 		}
 		
 		
-		colnames(ind_data)[1] = r_ID
+		colnames(ind_data)[1] = j_ID
 		
 		
 	}
@@ -310,7 +334,7 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 	result = list(ind_data = ind_data, env_data = env_data,
 								env_model = as.data.frame(cbind(env_coef, env_model_fit)),
 								env_fit = env_fit,
-								cues = cues
+								cues = cues, e_cues = e_cues, j_cues = j_cues
 	)
 	
 	class(result) = "lens"
@@ -320,30 +344,30 @@ lensModel = function(criterion, judgment, cues, r_ID, r_misc,
 }
 
 
-#eval_judge is an ancillary function to do respondent level analyses with %dopar%
+#eval_judge is an ancillary function to do judge level analyses with %dopar%
 #'Code outline
-#'for a single r_ID:
+#'for a single j_ID:
 #'    subset data
-#'    save r_misc vars
+#'    save j_misc vars
 #'    run model
 #'    step() model if needed
 #'    save coefs
 #'    save G, accuracy, C, model fit info
 #'    return ind_data as a one row data.frame
 
-eval_judge = function(i, criterion, judgment, cues, r_ID, r_misc,
+eval_judge = function(i, criterion, judgment, j_cues, j_ID, j_misc,
 											std, method, method_args, pred_type, step, step_args, data, criterion_hat, ...){
 	
-	r_ID_scalar = unique( data[, r_ID] )[i]
+	r_ID_scalar = unique( data[, j_ID] )[i]
 	
-	ind_data = data.frame(r_ID = r_ID_scalar, stringsAsFactors=F)
+	ind_data = data.frame(j_ID = r_ID_scalar, stringsAsFactors=F)
 	
-	temp = data[which(data[, r_ID] == r_ID_scalar),  ]
+	temp = data[which(data[, j_ID] == r_ID_scalar),  ]
 	
 	
-	#save r_misc vars
-	for(a in 1:length(r_misc)){
-		ind_data[1, r_misc[a]] = temp[1, r_misc[a]]
+	#save j_misc vars
+	for(a in 1:length(j_misc)){
+		ind_data[1, j_misc[a]] = temp[1, j_misc[a]]
 	}
 	
 	
@@ -351,7 +375,7 @@ eval_judge = function(i, criterion, judgment, cues, r_ID, r_misc,
 	if(std == "none") {
 		
 		#make formula
-		form = as.formula(paste(judgment, "~", paste(cues, collapse = "+")))
+		form = as.formula(paste(judgment, "~", paste(j_cues, collapse = "+")))
 		
 		fit = do.call("method", c(list(formula = form, data = temp), method_args))
 		
@@ -363,10 +387,10 @@ eval_judge = function(i, criterion, judgment, cues, r_ID, r_misc,
 		
 		ind_data$intercept = as.numeric(unname(tidy[tidy$term == "(Intercept)", "estimate" ]))
 		
-		for( a in 1:length(cues)){
+		for( a in 1:length(j_cues)){
 			
-			ind_data[1, paste0("b_", cues[a]) ] = tidy[tidy$term == cues[a], "estimate" ]
-			ind_data[1, paste0("se_", cues[a]) ] = tidy[tidy$term == cues[a], "std.error" ]
+			ind_data[1, paste0("b_", j_cues[a]) ] = tidy[tidy$term == j_cues[a], "estimate" ]
+			ind_data[1, paste0("se_", j_cues[a]) ] = tidy[tidy$term == j_cues[a], "std.error" ]
 			
 		}
 		
@@ -378,7 +402,7 @@ eval_judge = function(i, criterion, judgment, cues, r_ID, r_misc,
 		
 		#make formula
 		form = as.formula(paste("scale(", judgment, ") ~",
-														"scale(", paste(cues, collapse = ")+scale("), ")"  ))
+														"scale(", paste(j_cues, collapse = ")+scale("), ")"  ))
 		
 		fit = do.call("method", c(list(formula = form, data = temp), method_args))
 		
@@ -390,16 +414,16 @@ eval_judge = function(i, criterion, judgment, cues, r_ID, r_misc,
 		
 		ind_data$intercept = as.numeric(unname(tidy[tidy$term == "(Intercept)", "estimate" ]))
 		
-		for( a in 1:length(cues)){
+		for( a in 1:length(j_cues)){
 			
-			term = paste0( "scale(", cues[a], ")" )
+			term = paste0( "scale(", j_cues[a], ")" )
 			
 			if(term %in% tidy$term){
-				ind_data[1, paste0("B_", cues[a])   ] = tidy[tidy$term == term, "estimate" ]
-				ind_data[1, paste0("se_", cues[a])   ] = tidy[tidy$term == term, "std.error" ]
+				ind_data[1, paste0("B_", j_cues[a])   ] = tidy[tidy$term == term, "estimate" ]
+				ind_data[1, paste0("se_", j_cues[a])   ] = tidy[tidy$term == term, "std.error" ]
 			} else{
-				ind_data[1, paste0("B_", cues[a])   ] = NA
-				ind_data[1, paste0("se_", cues[a])   ] = NA
+				ind_data[1, paste0("B_", j_cues[a])   ] = NA
+				ind_data[1, paste0("se_", j_cues[a])   ] = NA
 			}
 			
 		}
@@ -411,7 +435,7 @@ eval_judge = function(i, criterion, judgment, cues, r_ID, r_misc,
 		
 		#make formula
 		form = as.formula(paste(judgment, "~",
-														"scale(", paste(cues, collapse = ")+scale("), ")"  ))
+														"scale(", paste(j_cues, collapse = ")+scale("), ")"  ))
 		
 		fit = do.call("method", c(list(formula = form, data = temp), method_args))
 		
@@ -423,10 +447,10 @@ eval_judge = function(i, criterion, judgment, cues, r_ID, r_misc,
 		
 		ind_data$intercept = as.numeric(unname(tidy[tidy$term == "(Intercept)", "estimate" ]))
 		
-		for( a in 1:length(cues)){
+		for( a in 1:length(j_cues)){
 			
-			ind_data[1, paste0("B_", cues[a])   ] = tidy[tidy$term == paste0( "scale(", cues[a], ")" ), "estimate" ]
-			ind_data[1, paste0("se_", cues[a])   ] = tidy[tidy$term == paste0( "scale(", cues[a], ")" ), "std.error" ]
+			ind_data[1, paste0("B_", j_cues[a])   ] = tidy[tidy$term == paste0( "scale(", j_cues[a], ")" ), "estimate" ]
+			ind_data[1, paste0("se_", j_cues[a])   ] = tidy[tidy$term == paste0( "scale(", j_cues[a], ")" ), "std.error" ]
 			
 		}
 	}
@@ -437,7 +461,7 @@ eval_judge = function(i, criterion, judgment, cues, r_ID, r_misc,
 		
 		#make formula
 		form = as.formula(paste("scale(", judgment, ") ~",
-														paste(cues, collapse = "+")))
+														paste(j_cues, collapse = "+")))
 		
 		fit = do.call("method", c(list(formula = form, data = temp), method_args))
 		
@@ -449,10 +473,10 @@ eval_judge = function(i, criterion, judgment, cues, r_ID, r_misc,
 		
 		ind_data$intercept = as.numeric(unname(tidy[tidy$term == "(Intercept)", "estimate" ]))
 		
-		for( a in 1:length(cues)){
+		for( a in 1:length(j_cues)){
 			
-			ind_data[1, paste0("b_", cues[a]) ] = tidy[tidy$term == cues[a], "estimate" ]
-			ind_data[1, paste0("se_", cues[a]) ] = tidy[tidy$term == cues[a], "std.error" ]
+			ind_data[1, paste0("b_", j_cues[a]) ] = tidy[tidy$term == j_cues[a], "estimate" ]
+			ind_data[1, paste0("se_", j_cues[a]) ] = tidy[tidy$term == j_cues[a], "std.error" ]
 			
 		}
 	}
@@ -627,397 +651,6 @@ summary.lens = function(lens, stat = median, by = NULL, digits = 3, conf = 0.95,
 	res
 	
 }
-
-
-
-
-
-
-
-
-
-
-
-
-# test area ------------------------------------------------
-# 
-# 
-# judgements_imp = read.csv("Cleaned Data/merged_NFP_FOP_data_long_judgements_and_cereal_imputed.csv")
-# 
-# 
-# #healthy and nutrition are sufficiently correlated to combine them
-# judgements_imp$judgment = rowMeans(cbind( judgements_imp$healthy, judgements_imp$nutritious ), na.rm = T)
-# 
-# 
-# # remove one cereal without nuval score
-# judgements_imp = judgements_imp[!is.na(judgements_imp$NuValScore), ]
-# 
-# 
-# 
-# 
-# #healthy and nutrition are sufficiently correlated to combine them
-# judgements_imp$judgment = rowMeans(cbind( judgements_imp$healthy, judgements_imp$nutritious ), na.rm = T)
-# 
-# 
-# 
-# 
-# 
-# lensModel_test = function(criterion, judgment, cues, r_ID, r_misc,
-# 													s_ID, s_misc, std = c("both", "x", "y", "none"),
-# 													method = glm, method_args = list(),
-# 													step = F, step_args = list(k = 2, direction = "both", scope = .~.),
-# 													pred_type = "response",
-# 													parallel = F, cores = 3, data){
-# 	
-# 	
-# 	
-# 	std = match.arg(std, c("both", "x", "y", "none"))
-# 	
-# 	
-# 	
-# 	data = as.data.frame(data)
-# 	
-# 	
-# 	#environment analyses
-# 	{
-# 		env_data = data.frame(s_ID = unique(data[, s_ID]))
-# 		
-# 		temp = data[!duplicated(data[, s_ID]), ]
-# 		
-# 		
-# 		# if UNstandardized coefs are requested
-# 		if(std == "none"){
-# 			
-# 			#make formula
-# 			form = as.formula(paste(criterion, "~", paste(cues, collapse = "+")))
-# 			
-# 			#fit environment model
-# 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
-# 			
-# 			
-# 			if(step){
-# 				env_fit = do.call("step", c(list(object = env_fit, trace = F), step_args))
-# 			}
-# 			
-# 			#get coefficients
-# 			tidy = broom::tidy(env_fit)
-# 			
-# 			#put coefficients in a data.frame
-# 			env_coef = data.frame(intercept = unname(tidy[tidy$term == "(Intercept)", "estimate" ]) )
-# 			
-# 			for( a in 1:length(cues)){
-# 				env_coef[1, paste0("b_", cues[a]) ] = tidy[tidy$term == cues[a], "estimate" ]
-# 				env_coef[1, paste0("se_", cues[a]) ] = tidy[tidy$term == cues[a], "std.error" ]
-# 			}
-# 			
-# 			rownames(env_coef) = NULL
-# 			
-# 			#save predicted values and residuals
-# 			criterion_hat = paste0(criterion, "_hat")
-# 			data[, criterion_hat] = predict(env_fit, type = pred_type, newdata = data)
-# 			data$env_resid = as.numeric(data[, criterion]) - as.numeric(data[, criterion_hat])
-# 			
-# 			
-# 		}
-# 		
-# 		# if standardized coefs are requested
-# 		if(std == "both") {
-# 			
-# 			#make formula
-# 			form = as.formula(paste("scale(", criterion, ") ~",
-# 															"scale(", paste(cues, collapse = ")+scale("), ")"  ))
-# 			
-# 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
-# 			
-# 			if(step){
-# 				env_fit = do.call("step", c(list(object = env_fit, trace = F), step_args))
-# 			}
-# 			
-# 			tidy = broom::tidy(env_fit)
-# 			
-# 			env_coef = data.frame(intercept = unname(tidy[tidy$term == "(Intercept)", "estimate" ]) )
-# 			
-# 			for( a in 1:length(cues)){
-# 				
-# 				term = paste0( "scale(", cues[a], ")" )
-# 				
-# 				if(term %in% tidy$term){
-# 					env_coef[1, paste0("B_", cues[a]) ] = tidy[tidy$term == term, "estimate" ]
-# 					env_coef[1, paste0("se_", cues[a]) ] = tidy[tidy$term == term, "std.error" ]
-# 				} else{
-# 					env_coef[1, paste0("B_", cues[a]) ] = NA
-# 					env_coef[1, paste0("se_", cues[a]) ] = NA
-# 				}
-# 				
-# 			}
-# 			
-# 			rownames(env_coef) = NULL
-# 			
-# 			
-# 			criterion_hat = paste0(criterion, "_hat")
-# 			data[, criterion_hat] = (as.numeric(predict(env_fit, type = pred_type, newdata = data)) * sd(as.numeric(data[, criterion]))) +
-# 				mean(as.numeric(data[, criterion]))
-# 			#to undo the standardization/scaling
-# 			
-# 			data$env_resid = as.numeric(data[, criterion]) - as.numeric(data[, criterion_hat])
-# 			
-# 			
-# 		}
-# 		
-# 		
-# 		# if X standardized coefs are requested
-# 		if(std == "x") {
-# 			
-# 			#make formula
-# 			form = as.formula(paste(criterion, "~",
-# 															"scale(", paste(cues, collapse = ")+scale("), ")"  ))
-# 			
-# 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
-# 			
-# 			if(step){
-# 				env_fit = do.call("step", c(list(object = env_fit, trace = F), step_args))
-# 			}
-# 			
-# 			tidy = broom::tidy(env_fit)
-# 			
-# 			env_coef = data.frame(intercept = unname(tidy[tidy$term == "(Intercept)", "estimate" ]) )
-# 			
-# 			for( a in 1:length(cues)){
-# 				
-# 				env_coef[1, paste0("B_", cues[a]) ] = tidy[tidy$term == paste0( "scale(", cues[a], ")" ), "estimate" ]
-# 				env_coef[1, paste0("se_", cues[a]) ] = tidy[tidy$term == paste0( "scale(", cues[a], ")" ), "std.error" ]
-# 				
-# 			}
-# 			
-# 			rownames(env_coef) = NULL
-# 			
-# 			
-# 			criterion_hat = paste0(criterion, "_hat")
-# 			data[, criterion_hat] = predict(env_fit, type = pred_type, newdata = data)
-# 			data$env_resid = as.numeric(data[, criterion]) - as.numeric(data[, criterion_hat])
-# 			
-# 			
-# 		}
-# 		
-# 		
-# 		# if Y standardized coefs are requested
-# 		if(std == "y") {
-# 			
-# 			#make formula
-# 			form = as.formula(paste("scale(", criterion, ") ~",
-# 															paste(cues, collapse = "+")))
-# 			
-# 			env_fit = do.call("method", c(list(formula = form, data = temp), method_args))
-# 			
-# 			if(step){
-# 				env_fit = do.call("step", c(list(object = env_fit, trace = F), step_args))
-# 			}
-# 			
-# 			tidy = broom::tidy(env_fit)
-# 			
-# 			env_coef = data.frame(intercept = unname(tidy[tidy$term == "(Intercept)", "estimate" ]) )
-# 			
-# 			for( a in 1:length(cues)){
-# 				
-# 				env_coef[1, paste0("b_", cues[a]) ] = tidy[tidy$term == cues[a], "estimate" ]
-# 				env_coef[1, paste0("se_", cues[a]) ] = tidy[tidy$term == cues[a], "std.error" ]
-# 				
-# 			}
-# 			
-# 			rownames(env_coef) = NULL
-# 			
-# 			
-# 			criterion_hat = paste0(criterion, "_hat")
-# 			data[, criterion_hat] = (as.numeric(predict(env_fit, type = pred_type, newdata = data)) * sd(as.numeric(data[, criterion]))) +
-# 				mean(as.numeric(data[, criterion]))
-# 			#to undo the standardization/scaling
-# 			
-# 			data$env_resid = as.numeric(data[, criterion]) - as.numeric(data[, criterion_hat])
-# 			
-# 		}
-# 		
-# 		
-# 		
-# 		
-# 		env_model_fit = as.data.frame(broom::glance(env_fit))
-# 		env_model_fit$r_squared = cor( as.numeric(data[, criterion]), as.numeric(data[, criterion_hat]) )^2
-# 		
-# 		cue_terms = as.character(form)[3]
-# 		cue_terms = unlist(strsplit(cue_terms, " + ", fixed = T))
-# 		
-# 		p = sum(cue_terms %in% tidy$term)+1
-# 		n = nobs(env_fit)
-# 		
-# 		#from summary.lm ans$adj.r.squared <-   1 - (1 - ans$r.squared) * ((n - df.int)/rdf)
-# 		env_model_fit$r_squared_adj = 1 - (1 - env_model_fit$r_squared) * ((n-1)/(n-p)) #adjusted R2
-# 		
-# 		
-# 		
-# 		#save s_misc vars
-# 		for(i in 1:nrow(env_data)){
-# 			
-# 			temp = data[which(data[, s_ID] == env_data[i, "s_ID"] ),  ]
-# 			
-# 			for(a in 1:length(s_misc)){
-# 				
-# 				env_data[i, s_misc[a]] = temp[1, s_misc[a]]
-# 				env_data[i, criterion_hat] = temp[1, criterion_hat]
-# 				env_data[i, "residual"] = temp[1, "env_resid"]
-# 			}
-# 			
-# 			
-# 		}
-# 		
-# 		
-# 		
-# 		colnames(env_data)[1] = s_ID
-# 		
-# 	}
-# 	
-# 	
-# 	
-# 	
-# 	
-# 	#respondent level analyses
-# 	{
-# 		
-# 		if(parallel){
-# 			
-# 			cores = as.integer(cores)
-# 			
-# 			if(is.null(cores) | is.na(cores)){
-# 				doParallel::registerDoParallel()
-# 			} else{
-# 				doParallel::registerDoParallel(cores = cores)
-# 			}
-# 			
-# 			ind_data = foreach::foreach(i = 1:length(unique(data[, r_ID])), .combine=rbind) %dopar% {
-# 				eval_judge(i = i, criterion = criterion, judgment = judgment, cues = cues, criterion_hat = criterion_hat,
-# 									 r_ID = r_ID, r_misc = r_misc, std = std, method = method, method_args = method_args,
-# 									 pred_type = pred_type, step = step, step_args = step_args, data = data)
-# 			}
-# 			
-# 			doParallel::stopImplicitCluster()
-# 			
-# 		} else{
-# 			
-# 			ind_data = foreach(i = 1:length(unique(data[, r_ID])), .combine=rbind) %do% {
-# 				eval_judge(i = i, criterion = criterion, judgment = judgment, cues = cues, criterion_hat = criterion_hat,
-# 									 r_ID = r_ID, r_misc = r_misc, std = std, method = method, method_args = method_args,
-# 									 pred_type = pred_type, step = step, step_args = step_args, data = data)
-# 			}
-# 			
-# 		}
-# 		
-# 		
-# 		colnames(ind_data)[1] = r_ID
-# 		
-# 		
-# 	}
-# 	
-# 	
-# 	
-# 	
-# 	result = list(ind_data = ind_data, env_data = env_data,
-# 								env_model = as.data.frame(cbind(env_coef, env_model_fit)),
-# 								env_fit = env_fit,
-# 								cues = cues
-# 	)
-# 	
-# 	class(result) = "lens"
-# 	
-# 	result
-# 	
-# }
-# 
-# 
-# 
-# 
-# 
-# library(ordinal)
-# 
-# judgements_imp$NuValScore_ord = factor(judgements_imp$NuValScore, 
-# 																			 levels = 0:100, 
-# 																			 ordered = T)
-# 
-# judgements_imp$judgment_ord = factor(round(judgements_imp$judgment), 
-# 																		 levels = 0:100,
-# 																		 ordered = T)
-# 
-# 
-# lens_clm = lensModel_test(criterion = "NuValScore_ord", judgment = "judgment_ord", 
-# 										 cues = c('Calories', 'Calories_Fat', 'Total_Fatg', 'Saturated_Fatg', 
-# 										 				 'Polyunsaturated_Fatg', 'Monounsaturated_Fatg',
-# 										 				 'Sodiummg', 'Potassiummg', 'Total_Carbohydratesg', 
-# 										 				 'Dietary_Fiberg', 'Soluble_Fiberg', 'Insoluble_Fiberg', 'Sugars_g',
-# 										 				 'Other_Carbohydratesg', 'Proteing', 'Vitamins_Minerals'),
-# 										 r_ID = "ResponseId",
-# 										 r_misc = 'condition', 
-# 										 s_ID = "cereal_master",
-# 										 s_misc = c('cereal_master', 'cereal_NFP', 'cereal_FOP', 'UPC',
-# 										 					 'Brand', 'Product', 'NuValScore') , 
-# 										 data = judgements_imp, parallel = F, step = F,
-# 										 method = clm, pred_type = "class",
-# 										 std = "x"
-# )
-# 
-# 
-# 
-# criterion = "NuValScore_ord"; judgment = "judgment_ord"
-# cues = c('Calories', 'Calories_Fat', 'Total_Fatg', 'Saturated_Fatg', 
-# 				 'Polyunsaturated_Fatg', 'Monounsaturated_Fatg',
-# 				 'Sodiummg', 'Potassiummg', 'Total_Carbohydratesg', 
-# 				 'Dietary_Fiberg', 'Soluble_Fiberg', 'Insoluble_Fiberg', 'Sugars_g',
-# 				 'Other_Carbohydratesg', 'Proteing', 'Vitamins_Minerals')
-# r_ID = "ResponseId"
-# r_misc = 'condition'
-# s_ID = "cereal_master"
-# s_misc = c('cereal_master', 'cereal_NFP', 'cereal_FOP', 'UPC',
-# 					 'Brand', 'Product', 'NuValScore')
-# data = judgements_imp; parallel = T; step = F;
-# method = clm; pred_type = "class";
-# std = "x"
-# method_args = list()
-# 
-# step_args = list(k = 2, direction = "both", scope = .~.)
-
-
-
-
-
-
-
-# 
-# test = lensModel_test(criterion = "NuValScore", judgment = "judgment",
-# 											cues = c('Calories', 'Calories_Fat', 'Total_Fatg', 'Saturated_Fatg',
-# 															 'Polyunsaturated_Fatg', 'Monounsaturated_Fatg',
-# 															 'Sodiummg', 'Potassiummg', 'Total_Carbohydratesg',
-# 															 'Dietary_Fiberg', 'Soluble_Fiberg', 'Insoluble_Fiberg', 'Sugars_g',
-# 															 'Other_Carbohydratesg', 'Proteing', 'Vitamins_Minerals'),
-# 											r_ID = "ResponseId",
-# 											r_misc = 'condition',
-# 											s_ID = "cereal_master",
-# 											s_misc = c('cereal_master', 'cereal_NFP', 'cereal_FOP', 'UPC',
-# 																 'Brand', 'Product', 'NuValScore'),
-# 											data = judgements_imp,
-# 											std = "both", parallel = T, method = glm, step = T, step_args = c(k = 2)
-# )
-
-
-
-
-
-
-
-
-
-#plotting function would be really nice
-{
-	
-}
-
-
-
 
 
 
