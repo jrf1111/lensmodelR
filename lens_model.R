@@ -630,31 +630,32 @@ summary.lens = function(lens, stat = median, by = NULL, digits = 3, conf = 0.95,
 	if("coefficient_type" %in% colnames(environment)) environment$coefficient_type=NULL
 	environment[, -1] = round(environment[, -1], digits = digits)
 	
-	cues = lens$cues
+	e_cues = lens$e_cues
+	j_cues = lens$j_cues
 	ind_data = lens$ind_data
 	
-	ind_coefs = data.frame(term = cues, estimate = 0, std.error = 0, statistic = 0, included = 0, stringsAsFactors = F)
+	ind_coefs = data.frame(term = j_cues, estimate = 0, std.error = 0, statistic = 0, included = 0, stringsAsFactors = F)
 	
-	for(i in 1:length(cues)){
-		if(paste0("B_", cues[i]) %in% colnames(ind_data)){
-			ind_coefs$estimate[i] = stat(ind_data[, paste0("B_", cues[i])], na.rm=T)
-			ind_coefs$std.error[i] = stat(ind_data[, paste0("se_", cues[i])], na.rm=T)
-			ind_coefs$included[i] = mean(!is.na(ind_data[, paste0("se_", cues[i])]))
-			ind_coefs$term[i] = paste0("scale(", cues[i], ")")
+	for(i in 1:length(j_cues)){
+		if(paste0("B_", j_cues[i]) %in% colnames(ind_data)){
+			ind_coefs$estimate[i] = stat(ind_data[, paste0("B_", j_cues[i])], na.rm=T)
+			ind_coefs$std.error[i] = stat(ind_data[, paste0("se_", j_cues[i])], na.rm=T)
+			ind_coefs$included[i] = mean(!is.na(ind_data[, paste0("se_", j_cues[i])]))
+			ind_coefs$term[i] = paste0("scale(", j_cues[i], ")")
 		}
 		
-		if(paste0("b_", cues[i]) %in% colnames(ind_data)){
-			ind_coefs$estimate[i] = stat(ind_data[, paste0("b_", cues[i])], na.rm=T)
-			ind_coefs$std.error[i] = stat(ind_data[, paste0("se_", cues[i])], na.rm=T)
-			ind_coefs$included[i] = mean(!is.na(ind_data[, paste0("se_", cues[i])]))
-			ind_coefs$term[i] = cues[i]
+		if(paste0("b_", j_cues[i]) %in% colnames(ind_data)){
+			ind_coefs$estimate[i] = stat(ind_data[, paste0("b_", j_cues[i])], na.rm=T)
+			ind_coefs$std.error[i] = stat(ind_data[, paste0("se_", j_cues[i])], na.rm=T)
+			ind_coefs$included[i] = mean(!is.na(ind_data[, paste0("se_", j_cues[i])]))
+			ind_coefs$term[i] = j_cues[i]
 		}
 		
-		if( !(paste0("B_", cues[i]) %in% colnames(ind_data)) & !(paste0("b_", cues[i]) %in% colnames(ind_data))  ){
+		if( !(paste0("B_", j_cues[i]) %in% colnames(ind_data)) & !(paste0("b_", j_cues[i]) %in% colnames(ind_data))  ){
 			ind_coefs$estimate[i] = NA
 			ind_coefs$std.error[i] = NA
 			ind_coefs$included[i] = NA
-			ind_coefs$term[i] = cues[i]
+			ind_coefs$term[i] = j_cues[i]
 		}
 		
 	}
@@ -693,28 +694,28 @@ summary.lens = function(lens, stat = median, by = NULL, digits = 3, conf = 0.95,
 			
 			temp = ind_data[which(ind_data[, by] == g),]
 			
-			g_coef = data.frame(term = cues, estimate = 0, std.error = 0, statistic = 0, included = 0, stringsAsFactors = F)
+			g_coef = data.frame(term = j_cues, estimate = 0, std.error = 0, statistic = 0, included = 0, stringsAsFactors = F)
 			
-			for(i in 1:length(cues)){
-				if(paste0("B_", cues[i]) %in% colnames(temp)){
-					g_coef$estimate[i] = stat(temp[, paste0("B_", cues[i])], na.rm=T)
-					g_coef$std.error[i] = stat(temp[, paste0("se_", cues[i])], na.rm=T)
-					g_coef$included[i] = mean(!is.na(temp[, paste0("se_", cues[i])]))
-					g_coef$term[i] = paste0("scale(", cues[i], ")")
+			for(i in 1:length(j_cues)){
+				if(paste0("B_", j_cues[i]) %in% colnames(temp)){
+					g_coef$estimate[i] = stat(temp[, paste0("B_", j_cues[i])], na.rm=T)
+					g_coef$std.error[i] = stat(temp[, paste0("se_", j_cues[i])], na.rm=T)
+					g_coef$included[i] = mean(!is.na(temp[, paste0("se_", j_cues[i])]))
+					g_coef$term[i] = paste0("scale(", j_cues[i], ")")
 				}
 				
-				if(paste0("b_", cues[i]) %in% colnames(temp)){
-					g_coef$estimate[i] = stat(temp[, paste0("b_", cues[i])], na.rm=T)
-					g_coef$std.error[i] = stat(temp[, paste0("se_", cues[i])], na.rm=T)
-					g_coef$included[i] = mean(!is.na(temp[, paste0("se_", cues[i])]))
-					g_coef$term[i] = cues[i]
+				if(paste0("b_", j_cues[i]) %in% colnames(temp)){
+					g_coef$estimate[i] = stat(temp[, paste0("b_", j_cues[i])], na.rm=T)
+					g_coef$std.error[i] = stat(temp[, paste0("se_", j_cues[i])], na.rm=T)
+					g_coef$included[i] = mean(!is.na(temp[, paste0("se_", j_cues[i])]))
+					g_coef$term[i] = j_cues[i]
 				}
 				
-				if( !(paste0("B_", cues[i]) %in% colnames(temp)) & !(paste0("b_", cues[i]) %in% colnames(temp))  ){
+				if( !(paste0("B_", j_cues[i]) %in% colnames(temp)) & !(paste0("b_", j_cues[i]) %in% colnames(temp))  ){
 					g_coef$estimate[i] = NA
 					g_coef$std.error[i] = NA
 					g_coef$included[i] = NA
-					g_coef$term[i] = cues[i]
+					g_coef$term[i] = j_cues[i]
 				}
 				
 			}
