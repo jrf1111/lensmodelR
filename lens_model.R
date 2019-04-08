@@ -85,7 +85,7 @@ lensModel = function(criterion, judgment, cues=NULL, j_cues=NULL, e_cues=NULL, j
 	
 	
 	
-	if(step==T) step=c("e", "j") else step="n"
+	if(step==T) step=c("e", "j")
 	estep=F
 	jstep=F
 	if("e" %in% step) estep=T else estep=F
@@ -636,6 +636,10 @@ summary.lens = function(lens, stat = median, by = NULL, digits = 3, conf = 0.95,
 	if("coefficient_type" %in% colnames(environment)) environment$coefficient_type=NULL
 	environment[, -1] = round(environment[, -1], digits = digits)
 	
+	R2_env = lens$env_model$r_squared
+	R2_adj_env = lens$env_model$r_squared_adj
+	
+	
 	e_cues = lens$e_cues
 	j_cues = lens$j_cues
 	ind_data = lens$ind_data
@@ -683,9 +687,13 @@ summary.lens = function(lens, stat = median, by = NULL, digits = 3, conf = 0.95,
 	
 	
 	res = list(environment = environment,
+						 R2_env = R2_env,
+						 R2_adj_env = R2_adj_env,
 						 judgements = ind_coefs, 
 						 G = round(summary(ind_data$G), digits = digits),
 						 Accuracy = round(summary(ind_data$accuracy), digits = digits),
+						 R2 = round(summary(ind_data$r_squared), digits = digits),
+						 R2_adj = round(summary(ind_data$r_squared_adj), digits = digits),
 						 C = round(summary(ind_data$C), digits = digits)
 	)
 	
@@ -744,6 +752,8 @@ summary.lens = function(lens, stat = median, by = NULL, digits = 3, conf = 0.95,
 			
 			res[[ paste0("G.", g) ]] = round(summary(temp$G), digits = digits)
 			res[[ paste0("Accuracy.", g) ]]= round(summary(temp$accuracy), digits = digits)
+			res[[ paste0("r_squared.", g) ]]= round(summary(temp$r_squared), digits = digits)
+			res[[ paste0("r_squared_adj.", g) ]]= round(summary(temp$r_squared_adj), digits = digits)
 			res[[ paste0("C.", g) ]] = round(summary(temp$C), digits = digits)
 			
 		}
@@ -758,5 +768,12 @@ res
 
 
 
+
+
+nobs.lens = function(lens){
+	
+	length(lens$ind_mods)
+	
+}
 
 
