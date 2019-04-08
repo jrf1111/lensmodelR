@@ -596,10 +596,16 @@ eval_judge = function(i, criterion, judgment, j_cues, j_ID, j_misc,
 	
 	
 	
+
 	if("statistic" %in% colnames(broom::glance(fit))){
 		ind_data$statistic = as.numeric(glance(fit)["statistic"])
 	}
+
+	if("p.value" %in% colnames(broom::glance(fit))){
+		ind_data$p.value = as.numeric(glance(fit)["p.value"])
+	}
 	
+		
 	ind_data$aic = as.numeric(glance(fit)["AIC"])
 	ind_data$bic = as.numeric(glance(fit)["BIC"])
 	
@@ -744,7 +750,7 @@ summary.lens = function(lens, stat = median, by = NULL, digits = 3, conf = 0.95,
 		
 	}
 	
-	res
+res
 	
 }
 
